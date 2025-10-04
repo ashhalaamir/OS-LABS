@@ -1,0 +1,7 @@
+The function that called syscall is usertrap().
+p->trapframe->a7 = 7, which corresponds to SYS_exec (from syscall.h).
+The CPU came from user mode, since the SPP bit in sstatus is 0.
+80001bfe:  ld   a5,0(a5)
+It crashes because address 0x0 is not mapped in kernel space.
+In xv6, user memory starts at 0x0, but kernel memory starts much higher (0x80000000).
+So dereferencing 0 in kernel mode causes a page fault.	
