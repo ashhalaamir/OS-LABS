@@ -1,0 +1,5 @@
+1. The function that called syscall is usertrap()
+2. The value of p->trapframe->a7 is 7, which corresponds to SYS_exec
+3. The CPU came from user mode.
+4. 80001bfe:  ld   a5,0(a5)
+5.
