@@ -1,0 +1,137 @@
+q1) 
+va: virtual address in hex
+pte : page table entry 64 bits
+pa : physcial address in hex (extracted from pte)
+perm: permission bits (extracted from pte), last 8 bits of perm
+	defined in kernel/riscv.h
+
+pte1: va 0x0 pte 0x21FC885B pa 0x87F22000 perm 0x5B
+user text segment (instructions)
+va 0x0 means starting page for user programs executable instructions
+perm 0x5B : 0b01011011 means flags for valid, read, execute, usermode
+the perm allows reading, executing and user mode access, but denies writing
+to prevent accidental modification of program instr.
+
+pte2: va 0x1000 pte 0x21FC7C5B pa 0x87F1F000 perm 0x5B
+user text segment (instructions)
+same flags as above VRXU
+continuation of the executable code segment
+
+pte3: va 0x2000 pte 0x21FC7817 pa 0x87F1E000 perm 0x17
+user data segment
+perm 0x17: 0b00010111 means valid read write useraccess
+this is the beginning of the programs initialzed data, stack or heap
+pte_X is not set to prevent the execution of code in data memory areas
+
+pte4: va 0x3000 pte 0x21FC7407 pa 0x87F1D000 perm 0x7
+kernel data memory
+perm 0x7: 0b00000111 valid read write
+the lack of pte_U flag means this page is only accesible in supervisor mode only
+which is kernel space. this entrly likely maps kernel data pages temporarily accesbile at a 
+low virtual address.
+
+pte5: va 0x4000 pte 0x21FC70D7 pa 0x87F1C000 perm 0xD7
+user data/stack/heap
+perm 0xD7 b11010111 valid read write user, also accessed and dirty
+typical of variable storage, the presence of A and D indicate the page has 
+recently been read and written to by the cpu.
+
+pte6 - pte10: unmapped/unused address space
+va 0x5000 pte 0x0 pa 0x0 perm 0x0
+va 0x6000 pte 0x0 pa 0x0 perm 0x0
+va 0x7000 pte 0x0 pa 0x0 perm 0x0
+va 0x8000 pte 0x0 pa 0x0 perm 0x0
+va 0x9000 pte 0x0 pa 0x0 perm 0x0
+
+
+pte maxva - 9 to maxva - 2: unmapped/unused address space, represets part
+of the large , unused gap between the users low memory segments and high memory
+mapping
+va 0x3FFFFF6000 pte 0x0 pa 0x0 perm 0x0
+va 0x3FFFFF7000 pte 0x0 pa 0x0 perm 0x0
+va 0x3FFFFF8000 pte 0x0 pa 0x0 perm 0x0
+va 0x3FFFFF9000 pte 0x0 pa 0x0 perm 0x0
+va 0x3FFFFFA000 pte 0x0 pa 0x0 perm 0x0
+va 0x3FFFFFB000 pte 0x0 pa 0x0 perm 0x0
+va 0x3FFFFFC000 pte 0x0 pa 0x0 perm 0x0
+va 0x3FFFFFD000 pte 0x0 pa 0x0 perm 0x0
+
+pte maxva - 1: va 0x3FFFFFE000 pte 0x21FD08C7 pa 0x87F42000 perm 0xC7
+TRAPFRAME page
+perm 0xC7 0b11000111 valid read write accessed dirty
+mapped just below the trampoline page at the top o fthe user address space.
+this page holds the trapframe structure necessary to save and restore the state
+of the user process during traps.
+it is R/W but explicitly not user-aaccessible, ensuring only the kernel can
+manipulate the saved state.
+
+pte maxva : va 0x3FFFFFF000 pte 0x2000184B pa 0x80006000 perm 0x4B
+TRAMPOLINE page
+perm 0x4B 0b01001010 read execute accessed
+mapped at the highest possible virtual address MAXVA 
+it contains the assembly code so R/X required for the CPU to safely transition
+between user and kernel space.
+it is not user_accesible so pte_U is clear.
+
+
+---------------------------
+
+
+
+q2) other system calls that only return data about the current process 
+and dont modify current state can also be sped up using this shared read-only
+USYSCALL page, because they dont require priviliged operations.
+more like; 
+uptime() where kernel could periodically update a field like usyscall->ticks
+and user process could just read it direcktly isntead of making a sycall
+
+getppid() could store usysycall->ppid in the same shared page at process creation/fork time
+
+time() could similarly be shared through the page to avoid the syscall
+
+getuid() or getgif() could be stored in the shared page as static info
+
+
+
+----------------------------
+
+
+q3) 
+Low Virtual Addresses (User Text, Data, and Heap)
+This region begins at virtual address 0x0 and holds the core program components loaded by the exec system call. The permissions ensure memory protection for the user process.
+VA 0x0000000000000000 (PTE 0x...c7c5b) and VA 0x0000000000001000 (PTE 0x...c705b)
+    PTE Flags: Read (R), Execute (X), User (U), Valid (V). (R-XU).
+    Logical Content: Text (Code Segment). These pages contain the program's executable instructions.
+    Permission: The Write (W) bit is intentionally clear. This prevents the user program from accidentally modifying its own code (e.g., via a null pointer dereference to address 0), which would trigger a page-fault exception.
+
+
+VA 0x0000000000002000 (PTE 0x...c6cd7) and VA 0x0000000000004000 (PTE 0x...c64d7)
+     PTE Flags: Read (R), Write (W), User (U), Valid (V). (R-WU).
+     Logical Content: Data / Initial Heap. These pages hold variables and dynamic memory accessible via sbrk.
+     Permission: The Execute (X) bit is intentionally clear. This protects the process from trying to execute data as code, which is a common security hardening technique.
+
+VA 0x0000000000003000 (PTE 0x...c6807)
+     PTE Flags: Read (R), Write (W), Valid (V), but User (U) is clear. (R-W, Supervisor Only).
+     Logical Content: Kernel-accessible data (Anomalous). Since the User bit (PTE_U) is cleared, this page is only accessible when the CPU is running in Supervisor mode (the kernel). While uncommon for a standard user data segment, this suggests a segment that the kernel maps into the user address space but strictly prohibits user access to.
+
+ 
+High Virtual Addresses (Kernel Interface Pages)
+This region uses the highest possible virtual addresses in the 39-bit address space, reserved by xv6 for pages necessary for kernel interaction and trap handling. Note that the PTE_U flag is often cleared here to enforce user/kernel isolation.
+VA 0x0000003fffffd000 (PTE 0x...d4853)
+     PTE Flags: Read (R), Write (W), Valid (V), but User (U) is clear. (R-W, Supervisor Only).
+     Logical Content: Trapframe Page. This page holds the struct trapframe, a kernel structure used to save the user process's state (registers, etc.) during traps and system calls.
+     Permission: The PTE_U bit is cleared to ensure the user program cannot read or modify its own saved state, which is critical for system security and integrity.
+
+VA 0x0000003fffffe000 (PTE 0x...d00c7)
+     PTE Flags: Read (R), Write (W), User (U), Valid (V). (R-WU).
+     Logical Content: User Stack Page. This is the page currently used by the process's stack.
+     Permission: It requires R, W, and U permissions for the process to function normally (stack organization). Directly below this address range, xv6 places an inaccessible guard page (not printed here, as it's invalid) to detect stack overflow.
+
+
+VA 0x0000003ffffff000 (PTE 0x...0184b)
+     PTE Flags: Read (R), Execute (X), Valid (V), but User (U) is clear. (R-X, Supervisor Only).
+     Logical Content: Trampoline Page. This page contains the shared kernel entry/exit code (uservec/userret) used to transfer control between user and supervisor modes during traps and system calls.
+     Permission: The PTE_U bit is cleared because this code must only be executed by the kernel (Supervisor Mode). It is mapped at the top of the user address space to minimize overlap with user memory.
+
+
+
