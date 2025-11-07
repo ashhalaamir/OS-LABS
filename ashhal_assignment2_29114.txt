@@ -1,0 +1,32 @@
+Ashhal Aamir 29114
+Assignment 2, Operating Systems, Slot 2, Sir Waseem Arain.
+
+
+A2: The TRAPFRAME page mapping is a crucial mechanism that stores the
+registers of a user process when a trap occurs. This is needed because,
+in RISC-V architecture, the hardware doesn’t automatically switch page 
+tables when a trap happens from user space. The trap handler, known as
+uservec, starts executing right away using the current user page table.
+To securely save the 32 registers of the user process into its dedicated
+trapframe structure, the virtual address used (TRAPFRAME or 0x3fffffe000)
+must be valid in the current user page table. If uservec were changed to 
+push registers onto the kernel stack or into the kernel’s process structure,
+which reside at high kernel addresses, these memory accesses would fail.
+This is because those kernel addresses are generally not mapped in the user
+page table, which could result in an exception or system crash. Hence,
+the TRAPFRAME dual mapping, which is accessible to both the user nd kernel
+page tables, is essential for saving the user process state before the operating
+system can fully transition to its kernel mode.
+
+A3: The TRAMPOLINE page is necessary because, like the TRAPFRAME, the entry point
+of the trap handler, defined by stvec, must be mapped in the user page table. This
+is required since the RISC-V hardware does not automatically switch page tables when
+a trap is triggered. However, it’s possible, in theory, to eliminate the need for a
+specialized TRAMPOLINE mapping if the kernel were modified to map all kernel memory
+into every user process’s page table. This would require marking the kernel memory
+as inaccessible to user-level code (by clearing the PTE_U flag), so the kernel’s trap
+handler could execute directly under the user page table without needing a separate
+trampoline address space. However, the xv6 operating system avoids this design to 
+improve memory isolation and reduce the risk of security vulnerabilities that could 
+arise from accidental or unintentional access to user pointers. Instead, it opts for
+a simpler, more isolated solution by using the dual-mapped TRAMPOLINE page.
