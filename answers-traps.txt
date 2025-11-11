@@ -1,38 +1,8 @@
-Karam Hussain 27857
-
-1. Which registers contain arguments to functions? For example, which register holds 13 in main's call to printf?
-
- In RISC-V, the first six function arguments are passed through registers a0 to a5. In this case, the
- value 57616 is stored in register a1.
-
-2. Where is the call to function f in the assembly code for main? Where is the call to g? (Hint: the compiler may
-inline functions.)
-
- The call to f is inlined by the compiler, meaning its code is directly inserted rather than invoked as a separate
- function call. The call to g, however, appears explicitly in the assembly as a 'call g' or 'jalr' instruction.
-
-3. At what address is the function printf located?
-
- The printf function is located at the memory address 0x80002930.
-
-4. What value is in the register ra just after the jalr to printf in main?
-
- Immediately after executing the jalr instruction to printf, the ra (return address) register holds the address 
- of the next instruction that follows the jalr call.
-
-5. Run the following code.
-        unsigned int i = 0x00646c72;
-        printf("H%x Wo%s", 57616, (char *) &i);
-What is the output?
-The output depends on that fact that the RISC-V is little-endian. If the RISC-V were instead big-endian,
-what would you set i to in order to yield the same output? Would you need to change 57616 to a different value?
-
- Output is He010 World.
- Big-Endian representation of i: 0x726c6400. The value 57616 remains unchanged.
-
-6. In the following code, what is going to be printed after 'y='? (note: the answer is not a specific value.) 
-Why does this happen?
-        printf("x=%d y=%d", 3);
-
- It prints a garbage value. printf expects two arguments but only receives one (3), so it reads the second from an 
- uninitialized register (a2) or stack location.
+---------------------------------------------------------------PROBLEM SET 4 TRAP ANSWERS--------------------------------------------------------------------
+A1: a0 to a5 hold arguments to functions. register a1 hold 13 in main's call to printf.
+A2: call o f's code is directly inserted rather than called a separate function call. Call to g appears in assembly as call g.
+A3: printf located at 0x80002930.
+A4: return address (ra) holds address of next instruction that follows jalr call, just after jalr printf in main.
+A5: output = He010 World. 57616 is unchanged, big-endian i would be 0x726c400.
+A6: a garbage value is printed as printf requires 2 arguments instead of 1. It will read the other from a stack location or an uninitialized register.
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
