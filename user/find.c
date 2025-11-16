@@ -1,0 +1,131 @@
+#include "kernel/types.h"
+#include "kernel/stat.h"
+#include "kernel/fs.h"
+#include "kernel/fcntl.h"
+#include "kernel/param.h"
+#include "user/user.h"
+
+int match(char *re, char *text);
+
+char* fmtname(char *path) {
+  static char buf[DIRSIZ+1];
+  char *p;
+
+  // Find last '/'
+  for (p = path + strlen(path); p >= path && *p != '/'; p--);
+  p++;
+
+  if (strlen(p) >= DIRSIZ)
+    return p;
+  memmove(buf, p, strlen(p));
+  buf[strlen(p)] = 0;
+  return buf;
+}
+
+void find(char *path, char *pattern, int doexec, int cmdargc, char **cmdargv){
+  char buf[512], *p;
+  int fd;
+  struct dirent de;
+  struct stat st;
+
+  if ((fd = open(path, O_RDONLY)) < 0) {
+    fprintf(2, "find: cannot open %s\n", path);
+    return;
+  }
+
+  if (fstat(fd, &st) < 0) {
+    fprintf(2, "find: cannot stat %s\n", path);
+    close(fd);
+    return;
+  }
+
+  // If it's a file, check regex match
+  if (st.type == T_FILE) {
+    if (match(pattern, fmtname(path))) {
+      if (doexec) {
+        char *nargv[MAXARG];
+        for (int i = 0; i < cmdargc; i++)
+          nargv[i] = cmdargv[i];
+        nargv[cmdargc] = path;
+        nargv[cmdargc+1] = 0;
+
+        if (fork() == 0) {
+          exec(nargv[0], nargv);
+          fprintf(2, "exec %s failed\n", nargv[0]);
+          exit(1);
+        }
+        wait(0);
+      } else {
+        printf("%s\n", path);
+      }
+    }
+  }
+
+  // If it's a directory, recurse
+  if (st.type == T_DIR) {
+    if (strlen(path) + 1 + DIRSIZ + 1 > sizeof buf) {
+      printf("find: path too long\n");
+    } else {
+      strcpy(buf, path);
+      p = buf + strlen(buf);
+      *p++ = '/';
+      while (read(fd, &de, sizeof(de)) == sizeof(de)) {
+        if (de.inum == 0) continue;
+        if (strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0) continue;
+        memmove(p, de.name, DIRSIZ);
+        p[DIRSIZ] = 0;
+        find(buf, pattern, doexec, cmdargc, cmdargv);
+      }
+    }
+  }
+
+  close(fd);
+}
+
+int main(int argc, char *argv[]){
+  if (argc < 3) {
+    fprintf(2, "Usage: find <dir> <regex> [-exec cmd]\n");
+    exit(1);
+  }
+
+  if (argc > 3 && strcmp(argv[3], "-exec") == 0) {
+    find(argv[1], argv[2], 1, argc-4, &argv[4]);
+  } else {
+    find(argv[1], argv[2], 0, 0, 0);
+  }
+
+  exit(0);
+}
+
+int matchhere(char *re, char *text);
+int matchstar(int c, char *re, char *text);
+
+int match(char *re, char *text){
+  if(re[0] == '^')
+    return matchhere(re+1, text);
+  do{  // must look at empty string too
+    if(matchhere(re, text))
+      return 1;
+  }while(*text++ != '\0');
+  return 0;
+}
+
+int matchhere(char *re, char *text){
+  if(re[0] == '\0')
+    return 1;
+  if(re[1] == '*')
+    return matchstar(re[0], re+2, text);
+  if(re[0] == '$' && re[1] == '\0')
+    return *text == '\0';
+  if(*text!='\0' && (re[0]=='.' || re[0]==*text))
+    return matchhere(re+1, text+1);
+  return 0;
+}
+
+int matchstar(int c, char *re, char *text){
+  do{  // a * matches zero or more instances
+    if(matchhere(re, text))
+      return 1;
+  }while(*text!='\0' && (*text++==c || c=='.'));
+  return 0;
+}

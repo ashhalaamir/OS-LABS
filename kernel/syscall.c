@@ -80,7 +80,6 @@ argstr(int n, char *buf, int max)
 }
 
 // Prototypes for the functions that handle system calls.
-extern uint64 sys_interpose(void);
 extern uint64 sys_fork(void);
 extern uint64 sys_exit(void);
 extern uint64 sys_wait(void);
@@ -127,7 +126,6 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
-[SYS_interpose]   sys_interpose, 
 };
 
 void
@@ -137,31 +135,13 @@ syscall(void)
   struct proc *p = myproc();
 
   num = p->trapframe->a7;
-
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    if (p->sys_mask & (1 << num)) {
-      // If blocked syscall, check if it’s open/exec and matches allowed_path
-      if (num == SYS_open || num == SYS_exec) {
-        char path[MAXPATH];
-        // peek path but ONLY once here
-        if (argstr(0, path, MAXPATH) >= 0 &&
-            strncmp(path, p->allowed_path, MAXPATH) == 0) {
-          // allowed path, call syscall handler
-          p->trapframe->a0 = syscalls[num]();
-          return;
-        }
-      }
-      // blocked otherwise
-      p->trapframe->a0 = -1;
-      return;
-    }
-
-    // normal syscall
+    // Use num to lookup the system call function for num, call it,
+    // and store its return value in p->trapframe->a0
     p->trapframe->a0 = syscalls[num]();
   } else {
     printf("%d %s: unknown sys call %d\n",
-           p->pid, p->name, num);
+            p->pid, p->name, num);
     p->trapframe->a0 = -1;
   }
 }
-
